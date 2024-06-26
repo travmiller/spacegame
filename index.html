@@ -1,0 +1,920 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Space Ship Game</title>
+  <style>
+    body,
+    html {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      overflow: hidden;
+      font-family: Arial, sans-serif;
+    }
+
+    #game-container {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      background-color: #000000;
+    }
+
+    #ship {
+      position: absolute;
+      width: 40px;
+      height: 40px;
+      background-color: #ff0000;
+      clip-path: polygon(50% 0%, 0% 100%, 100% 100%);
+      z-index: 10;
+      transition: box-shadow 0.3s;
+    }
+
+    .celestial-object {
+      position: absolute;
+      border-radius: 50%;
+    }
+
+    .enemy-ship {
+      position: absolute;
+      width: 30px;
+      height: 30px;
+      background-color: #00ff00;
+      clip-path: polygon(50% 100%, 0% 0%, 100% 0%);
+    }
+
+    .hp-bar {
+      position: absolute;
+      width: 100%;
+      height: 5px;
+      background-color: #333;
+      top: -10px;
+    }
+
+    .hp-bar-fill {
+      height: 100%;
+      background-color: #00ff00;
+      transition: width 0.3s;
+    }
+
+    #ability-grid {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      grid-gap: 10px;
+      z-index: 20;
+    }
+
+    .ability-button {
+      width: 60px;
+      height: 60px;
+      font-size: 24px;
+      background-color: #4a4a4a;
+      border: none;
+      color: white;
+      cursor: pointer;
+      position: relative;
+      background-size: cover;
+      background-position: center;
+    }
+
+    .cooldown-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0, 0, 0, 0.7);
+      color: white;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-size: 24px;
+    }
+
+    .ability-tooltip {
+      position: absolute;
+      background-color: rgba(0, 0, 0, 0.8);
+      color: white;
+      padding: 10px;
+      border-radius: 5px;
+      z-index: 30;
+      display: none;
+      white-space: normal;
+      width: 200px;
+      font-size: 14px;
+    }
+
+    #damage-output,
+    #dps-meter {
+      position: absolute;
+      top: 10px;
+      font-size: 18px;
+      font-weight: bold;
+      color: white;
+      z-index: 20;
+    }
+
+    #damage-output {
+      left: 10px;
+    }
+
+    #dps-meter {
+      right: 10px;
+    }
+
+    .ability-effect {
+      position: absolute;
+      pointer-events: none;
+    }
+
+    #player-health-bar {
+      position: absolute;
+      bottom: 20px;
+      left: 20px;
+      width: 200px;
+      height: 20px;
+      background-color: #333;
+      z-index: 20;
+    }
+
+    #player-health-fill {
+      height: 100%;
+      width: 100%;
+      background-color: #00ff00;
+      transition: width 0.3s;
+    }
+
+    #player-shield-fill {
+      height: 100%;
+      width: 0%;
+      background-color: #0000ff;
+      position: absolute;
+      top: 0;
+      right: 0;
+      transition: width 0.3s;
+    }
+
+    #cast-bar-container {
+      position: absolute;
+      bottom: 170px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 300px;
+      height: 20px;
+      background-color: #333;
+      display: none;
+    }
+
+    #cast-bar-fill {
+      height: 100%;
+      background-color: #ffff00;
+      width: 0%;
+    }
+
+    #game-over {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 48px;
+      color: white;
+      text-align: center;
+      display: none;
+      z-index: 100;
+    }
+
+    .missile {
+      position: absolute;
+      width: 10px;
+      height: 20px;
+      background-color: red;
+      border-radius: 50%;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="game-container">
+    <div id="ship"></div>
+    <div id="ability-grid"></div>
+    <div id="damage-output">Total Damage: 0</div>
+    <div id="dps-meter">DPS: 0</div>
+    <div id="player-health-bar">
+      <div id="player-health-fill"></div>
+      <div id="player-shield-fill"></div>
+    </div>
+    <div id="cast-bar-container">
+      <div id="cast-bar-fill"></div>
+    </div>
+    <div id="game-over">Game Over<br><button onclick="restartGame()">Restart</button></div>
+  </div>
+
+  <script>
+    const abilities = [
+      { name: 'Photon Blast', damage: 50, cooldown: 3, key: '1', triggersGCD: true, effect: 'beam', castTime: 0, icon: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect x="10" y="45" width="80" height="10" fill="yellow"/></svg>', description: 'Fires a quick burst of concentrated light energy.' },
+      { name: 'Quantum Missiles', damage: 70, cooldown: 5, key: '2', triggersGCD: true, effect: 'missiles', castTime: 1, icon: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><polygon points="50,10 40,90 50,70 60,90" fill="red"/></svg>', description: 'Launches a spread of homing missiles.' },
+      { name: 'Plasma Cannon', damage: 100, cooldown: 8, key: '3', triggersGCD: true, effect: 'bolt', castTime: 2, icon: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="40" fill="cyan"/></svg>', description: 'Charges and fires a powerful plasma bolt.' },
+      { name: 'Tachyon Pulse', damage: 30, cooldown: 2, key: '4', triggersGCD: true, effect: 'burst', castTime: 0, icon: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="45" stroke="white" stroke-width="10" fill="none"/></svg>', description: 'Emits a quick pulse of tachyon particles.' },
+      { name: 'Shield Boost', damage: 0, cooldown: 15, key: 'q', triggersGCD: true, effect: 'shield', castTime: 0, icon: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><path d="M50 10 L90 90 L10 90 Z" fill="blue" fill-opacity="0.5"/></svg>', description: 'Activates a temporary energy shield.' },
+      { name: 'Emergency Repair', damage: 0, cooldown: 30, key: 'e', triggersGCD: true, effect: 'heal', castTime: 2, icon: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect x="40" y="20" width="20" height="60" fill="green"/><rect x="20" y="40" width="60" height="20" fill="green"/></svg>', description: 'Initiates emergency repairs to restore hull integrity.' },
+      { name: 'Temporal Rift', damage: 10, cooldown: 45, key: 'r', triggersGCD: true, effect: 'slow', castTime: 1, icon: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="45" stroke="purple" stroke-width="10" fill="none"/><line x1="50" y1="50" x2="75" y2="25" stroke="purple" stroke-width="5"/></svg>', description: 'Creates a temporal distortion to slow down enemies and celestial objects, dealing minor damage.' },
+      { name: 'Warp Jump', damage: 0, cooldown: 20, key: 'f', triggersGCD: true, effect: 'teleport', castTime: 0, icon: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><path d="M10 90 L50 10 L90 90 L50 50 Z" fill="white"/></svg>', description: 'Instantly teleports the ship to a random nearby location.' }
+    ];
+
+    let playerHealth = 100;
+    let playerMaxHealth = 100;
+    let shieldActive = false;
+    let totalDamage = 0;
+    let damageLog = [];
+    const cooldowns = {};
+    const abilityButtons = {};
+    let shipX = window.innerWidth / 2;
+    let shipY = window.innerHeight / 2;
+    let shipSpeed = 5;
+    const keys = { w: false, a: false, s: false, d: false };
+    const celestialObjects = [];
+    const enemyShips = [];
+    const abilityEffects = [];
+    let gameActive = true;
+    let currentCast = null;
+
+    function createAbilityButtons() {
+      const abilityGrid = document.getElementById('ability-grid');
+      abilities.forEach(ability => {
+        const button = document.createElement('button');
+        button.textContent = ability.key;
+        button.className = 'ability-button';
+        button.style.backgroundImage = `url('${ability.icon}')`;
+        button.addEventListener('click', () => useAbility(ability));
+
+        const tooltip = document.createElement('div');
+        tooltip.className = 'ability-tooltip';
+        tooltip.innerHTML = `<strong>${ability.name}</strong><br>
+                                     Damage: ${ability.damage}<br>
+                                     Cooldown: ${ability.cooldown}s<br>
+                                     Cast Time: ${ability.castTime}s<br>
+                                     <em>${ability.description}</em>`;
+
+        button.addEventListener('mouseover', () => {
+          tooltip.style.display = 'block';
+        });
+        button.addEventListener('mouseout', () => {
+          tooltip.style.display = 'none';
+        });
+
+        const cooldownOverlay = document.createElement('div');
+        cooldownOverlay.className = 'cooldown-overlay';
+        cooldownOverlay.style.display = 'none';
+
+        button.appendChild(tooltip);
+        button.appendChild(cooldownOverlay);
+        abilityGrid.appendChild(button);
+        cooldowns[ability.name] = 0;
+        abilityButtons[ability.name] = button;
+      });
+    }
+
+    function useAbility(ability) {
+      if (!gameActive || cooldowns[ability.name] > 0 || currentCast) {
+        return;
+      }
+
+      if (ability.castTime > 0) {
+        startCasting(ability);
+      } else {
+        executeAbility(ability);
+      }
+    }
+
+    function startCasting(ability) {
+      currentCast = ability;
+      const castBar = document.getElementById('cast-bar-container');
+      const castBarFill = document.getElementById('cast-bar-fill');
+      castBar.style.display = 'block';
+      castBarFill.style.width = '0%';
+
+      let castProgress = 0;
+      const castInterval = setInterval(() => {
+        castProgress += 0.1;
+        castBarFill.style.width = `${(castProgress / ability.castTime) * 100}%`;
+
+        if (castProgress >= ability.castTime) {
+          clearInterval(castInterval);
+          castBar.style.display = 'none';
+          executeAbility(ability);
+          currentCast = null;
+        }
+      }, 100);
+
+      currentCast.cancelCast = () => {
+        clearInterval(castInterval);
+        castBar.style.display = 'none';
+        currentCast = null;
+      };
+    }
+
+    function executeAbility(ability) {
+      cooldowns[ability.name] = ability.cooldown;
+      startCooldown(ability);
+      createAbilityEffect(ability);
+
+      if (ability.triggersGCD) {
+        applyGlobalCooldown();
+      }
+    }
+
+    function startCooldown(ability) {
+      const button = abilityButtons[ability.name];
+      const overlay = button.querySelector('.cooldown-overlay');
+      overlay.style.display = 'flex';
+      overlay.textContent = cooldowns[ability.name];
+
+      const interval = setInterval(() => {
+        cooldowns[ability.name]--;
+        overlay.textContent = cooldowns[ability.name];
+        if (cooldowns[ability.name] <= 0) {
+          clearInterval(interval);
+          overlay.style.display = 'none';
+        }
+      }, 1000);
+    }
+
+    function applyGlobalCooldown() {
+      abilities.forEach(ability => {
+        if (ability.triggersGCD && cooldowns[ability.name] < 1) {
+          cooldowns[ability.name] = 1;
+          const button = abilityButtons[ability.name];
+          const overlay = button.querySelector('.cooldown-overlay');
+          overlay.style.display = 'flex';
+          overlay.textContent = '1';
+          setTimeout(() => {
+            cooldowns[ability.name] = 0;
+            overlay.style.display = 'none';
+          }, 1000);
+        }
+      });
+    }
+
+    function createAbilityEffect(ability) {
+      switch (ability.effect) {
+        case 'beam':
+          createBeamEffect();
+          break;
+        case 'missiles':
+          launchQuantumMissiles();
+          break;
+        case 'bolt':
+          createPlasmaBoltEffect();
+          break;
+        case 'burst':
+          createTachyonPulseEffect();
+          break;
+        case 'shield':
+          activateShield();
+          break;
+        case 'heal':
+          activateEmergencyRepair();
+          break;
+        case 'slow':
+          createTemporalRiftEffect();
+          break;
+        case 'teleport':
+          animateWarpJump();
+          break;
+      }
+    }
+
+    function createBeamEffect() {
+      const beam = document.createElement('div');
+      beam.className = 'ability-effect';
+      beam.style.position = 'absolute';
+      beam.style.left = `${shipX + 20}px`;
+      beam.style.top = `${shipY}px`;
+      beam.style.width = '10px';
+      beam.style.height = '0px';
+      beam.style.backgroundColor = 'yellow';
+      beam.style.boxShadow = '0 0 10px yellow';
+      document.getElementById('game-container').appendChild(beam);
+      animateBeam(beam);
+    }
+
+    function animateBeam(beam) {
+      let height = 0;
+      const interval = setInterval(() => {
+        height += 20;
+        beam.style.height = `${height}px`;
+        beam.style.top = `${parseFloat(beam.style.top) - 20}px`;
+        if (height >= window.innerHeight) {
+          clearInterval(interval);
+          document.getElementById('game-container').removeChild(beam);
+        }
+        checkBeamCollisions(beam);
+      }, 20);
+    }
+
+    function launchQuantumMissiles() {
+      for (let i = 0; i < 3; i++) {
+        const missile = document.createElement('div');
+        missile.className = 'missile';
+        missile.style.left = `${shipX + 20}px`;
+        missile.style.top = `${shipY + 40}px`; // Start behind the ship
+        document.getElementById('game-container').appendChild(missile);
+        animateMissile(missile, i * 30 - 30);
+      }
+    }
+
+    function animateMissile(missile, angle) {
+      let distance = 0;
+      const initialX = parseFloat(missile.style.left);
+      const initialY = parseFloat(missile.style.top);
+      const interval = setInterval(() => {
+        distance += 2;
+        const radians = (angle * Math.PI) / 180;
+        missile.style.left = `${initialX + Math.sin(radians) * distance}px`;
+        missile.style.top = `${initialY + Math.cos(radians) * distance}px`;
+        if (distance > window.innerHeight) {
+          clearInterval(interval);
+          document.getElementById('game-container').removeChild(missile);
+        }
+        checkMissileCollisions(missile);
+      }, 20);
+    }
+
+    function createPlasmaBoltEffect() {
+      const bolt = document.createElement('div');
+      bolt.className = 'ability-effect';
+      bolt.style.position = 'absolute';
+      bolt.style.left = `${shipX + 20}px`;
+      bolt.style.top = `${shipY}px`;
+      bolt.style.width = '30px';
+      bolt.style.height = '30px';
+      bolt.style.backgroundColor = 'cyan';
+      bolt.style.borderRadius = '50%';
+      bolt.style.boxShadow = '0 0 15px cyan';
+      document.getElementById('game-container').appendChild(bolt);
+      animatePlasmaBolt(bolt);
+    }
+
+    function animatePlasmaBolt(bolt) {
+      const interval = setInterval(() => {
+        const top = parseFloat(bolt.style.top);
+        bolt.style.top = `${top - 10}px`;
+        if (top < -30) {
+          clearInterval(interval);
+          document.getElementById('game-container').removeChild(bolt);
+        }
+        checkBoltCollisions(bolt);
+      }, 20);
+    }
+
+    function createTachyonPulseEffect() {
+      const pulse = document.createElement('div');
+      pulse.className = 'ability-effect';
+      pulse.style.position = 'absolute';
+      pulse.style.left = `${shipX + 20}px`;
+      pulse.style.top = `${shipY}px`;
+      pulse.style.width = '0px';
+      pulse.style.height = '0px';
+      pulse.style.border = '2px solid white';
+      pulse.style.borderRadius = '50%';
+      pulse.style.boxShadow = '0 0 20px white';
+      document.getElementById('game-container').appendChild(pulse);
+      animateTachyonPulse(pulse);
+    }
+
+    function animateTachyonPulse(pulse) {
+      let size = 0;
+      const maxSize = 200;
+      const interval = setInterval(() => {
+        size += 10;
+        pulse.style.width = `${size}px`;
+        pulse.style.height = `${size}px`;
+        pulse.style.left = `${shipX + 20 - size / 2}px`;
+        pulse.style.top = `${shipY - size / 2}px`;
+        if (size >= maxSize) {
+          clearInterval(interval);
+          document.getElementById('game-container').removeChild(pulse);
+        }
+        checkPulseCollisions(pulse);
+      }, 20);
+    }
+
+    function activateShield() {
+      const shieldAmount = 50; // Amount of shield to add
+      const currentShield = parseFloat(document.getElementById('player-shield-fill').style.width) || 0;
+      const newShield = Math.min(currentShield + shieldAmount, 100); // Cap at 100%
+      document.getElementById('player-shield-fill').style.width = `${newShield}%`;
+
+      const ship = document.getElementById('ship');
+      ship.style.boxShadow = '0 0 20px 10px rgba(0, 0, 255, 0.5)';
+
+      // Remove the glow effect after 5 seconds
+      setTimeout(() => {
+        ship.style.boxShadow = 'none';
+      }, 5000);
+    }
+
+    function activateEmergencyRepair() {
+      const healAmount = 30; // Amount of health to restore
+      playerHealth = Math.min(playerHealth + healAmount, playerMaxHealth);
+      updatePlayerHealthBar();
+
+      // Visual effect for healing
+      const ship = document.getElementById('ship');
+      ship.style.boxShadow = '0 0 20px 10px rgba(0, 255, 0, 0.5)';
+
+      // Remove the glow effect after 2 seconds
+      setTimeout(() => {
+        ship.style.boxShadow = 'none';
+      }, 2000);
+    }
+
+    function createTemporalRiftEffect() {
+      const rift = document.createElement('div');
+      rift.className = 'ability-effect temporal-rift';
+      rift.style.position = 'absolute';
+      rift.style.left = `${shipX + 20}px`;
+      rift.style.top = `${shipY}px`;
+      rift.style.width = '0px';
+      rift.style.height = '0px';
+      rift.style.border = '2px solid purple';
+      rift.style.borderRadius = '50%';
+      rift.style.boxShadow = '0 0 30px purple';
+      document.getElementById('game-container').appendChild(rift);
+      animateTemporalRift(rift);
+    }
+
+    function animateTemporalRift(rift) {
+      let size = 0;
+      const maxSize = 600; // Increased size for larger area of effect
+      const interval = setInterval(() => {
+        size += 10;
+        rift.style.width = `${size}px`;
+        rift.style.height = `${size}px`;
+        rift.style.left = `${shipX + 20 - size / 2}px`;
+        rift.style.top = `${shipY - size / 2}px`;
+        if (size >= maxSize) {
+          clearInterval(interval);
+          setTimeout(() => {
+            document.getElementById('game-container').removeChild(rift);
+          }, 5000); // Effect lasts for 5 seconds
+        }
+        applyTemporalRiftEffect(rift);
+      }, 20);
+    }
+
+    function animateWarpJump() {
+      const oldX = shipX;
+      const oldY = shipY;
+      shipX = Math.random() * (window.innerWidth - 40);
+      shipY = Math.random() * (window.innerHeight - 40);
+
+      const warpEffect = document.createElement('div');
+      warpEffect.className = 'ability-effect';
+      warpEffect.style.position = 'absolute';
+      warpEffect.style.width = '2px';
+      warpEffect.style.height = '2px';
+      warpEffect.style.backgroundColor = 'white';
+      warpEffect.style.boxShadow = '0 0 10px white';
+      document.getElementById('game-container').appendChild(warpEffect);
+
+      const distance = Math.sqrt(Math.pow(shipX - oldX, 2) + Math.pow(shipY - oldY, 2));
+      const angle = Math.atan2(shipY - oldY, shipX - oldX);
+      const steps = 20;
+
+      for (let i = 0; i <= steps; i++) {
+        setTimeout(() => {
+          const progress = i / steps;
+          const x = oldX + (shipX - oldX) * progress;
+          const y = oldY + (shipY - oldY) * progress;
+          warpEffect.style.left = `${x}px`;
+          warpEffect.style.top = `${y}px`;
+          warpEffect.style.width = `${2 + 38 * Math.sin(progress * Math.PI)}px`;
+          warpEffect.style.height = `${2 + 38 * Math.sin(progress * Math.PI)}px`;
+          warpEffect.style.opacity = 1 - progress;
+
+          if (i === steps) {
+            document.getElementById('game-container').removeChild(warpEffect);
+            updateShipPosition();
+          }
+        }, i * (distance / 500));
+      }
+    }
+
+    function checkBeamCollisions(beam) {
+      const beamRect = beam.getBoundingClientRect();
+      checkAbilityCollisions(beamRect, 50); // Photon Blast damage
+    }
+
+    function checkMissileCollisions(missile) {
+      const missileRect = missile.getBoundingClientRect();
+      checkAbilityCollisions(missileRect, 70); // Quantum Missiles damage
+    }
+
+    function checkBoltCollisions(bolt) {
+      const boltRect = bolt.getBoundingClientRect();
+      checkAbilityCollisions(boltRect, 100); // Plasma Cannon damage
+    }
+
+    function checkPulseCollisions(pulse) {
+      const pulseRect = pulse.getBoundingClientRect();
+      checkAbilityCollisions(pulseRect, 30); // Tachyon Pulse damage
+    }
+
+    function checkAbilityCollisions(abilityRect, damage) {
+      celestialObjects.forEach((object, index) => {
+        const objectRect = object.element.getBoundingClientRect();
+        if (isColliding(abilityRect, objectRect)) {
+          applyDamage(object, damage);
+          createDamageIndicator(object, damage);
+        }
+      });
+    }
+
+    function applyTemporalRiftEffect(rift) {
+      const riftRect = rift.getBoundingClientRect();
+      enemyShips.forEach(enemy => {
+        const enemyRect = enemy.element.getBoundingClientRect();
+        if (isColliding(riftRect, enemyRect)) {
+          enemy.slow = true;
+        } else {
+          enemy.slow = false;
+        }
+      });
+
+      celestialObjects.forEach(object => {
+        const objectRect = object.element.getBoundingClientRect();
+        if (isColliding(riftRect, objectRect)) {
+          object.slow = true;
+          applyDamage(object, 10); // Apply small damage over time
+        } else {
+          object.slow = false;
+        }
+      });
+    }
+
+    function applyDamage(object, damage) {
+      object.hp -= damage;
+      totalDamage += damage;
+      updateDamageOutput();
+      logDamage(damage);
+
+      if (object.hp <= 0) {
+        document.getElementById('game-container').removeChild(object.element);
+        celestialObjects.splice(celestialObjects.indexOf(object), 1);
+      } else {
+        const hpPercentage = (object.hp / object.maxHp) * 100;
+        object.hpBarFill.style.width = `${hpPercentage}%`;
+      }
+    }
+
+    function createDamageIndicator(object, damage) {
+      const indicator = document.createElement('div');
+      indicator.textContent = damage;
+      indicator.style.position = 'absolute';
+      indicator.style.left = `${parseFloat(object.element.style.left) + parseFloat(object.element.style.width) / 2}px`;
+      indicator.style.top = `${parseFloat(object.element.style.top)}px`;
+      indicator.style.color = 'red';
+      indicator.style.fontSize = '20px';
+      indicator.style.fontWeight = 'bold';
+      indicator.style.textShadow = '0 0 5px black';
+      document.getElementById('game-container').appendChild(indicator);
+
+      let opacity = 1;
+      const fadeInterval = setInterval(() => {
+        opacity -= 0.05;
+        indicator.style.opacity = opacity;
+        indicator.style.top = `${parseFloat(indicator.style.top) - 1}px`;
+        if (opacity <= 0) {
+          clearInterval(fadeInterval);
+          document.getElementById('game-container').removeChild(indicator);
+        }
+      }, 50);
+    }
+
+    function updateDamageOutput() {
+      document.getElementById('damage-output').textContent = `Total Damage: ${totalDamage}`;
+    }
+
+    function logDamage(damage) {
+      const now = Date.now();
+      damageLog.push({ time: now, damage: damage });
+      damageLog = damageLog.filter(entry => now - entry.time <= 10000);
+      updateDPS();
+    }
+
+    function updateDPS() {
+      const now = Date.now();
+      const relevantDamage = damageLog.filter(entry => now - entry.time <= 10000);
+      const totalDamageInLast10Seconds = relevantDamage.reduce((sum, entry) => sum + entry.damage, 0);
+      const dps = totalDamageInLast10Seconds / 10;
+      document.getElementById('dps-meter').textContent = `DPS: ${dps.toFixed(2)}`;
+    }
+
+    function handleKeyDown(event) {
+      if (['w', 'a', 's', 'd'].includes(event.key)) {
+        keys[event.key] = true;
+      } else {
+        const ability = abilities.find(a => a.key === event.key);
+        if (ability) {
+          useAbility(ability);
+        }
+      }
+    }
+
+    function handleKeyUp(event) {
+      if (['w', 'a', 's', 'd'].includes(event.key)) {
+        keys[event.key] = false;
+      }
+    }
+
+    function createCelestialObject() {
+      const object = document.createElement('div');
+      object.className = 'celestial-object';
+      const size = Math.random() * 50 + 10;
+      object.style.width = `${size}px`;
+      object.style.height = `${size}px`;
+      object.style.backgroundColor = `hsl(${Math.random() * 360}, 50%, 50%)`;
+      object.style.left = `${Math.random() * window.innerWidth}px`;
+      object.style.top = `-50px`;
+
+      const hpBar = document.createElement('div');
+      hpBar.className = 'hp-bar';
+      const hpBarFill = document.createElement('div');
+      hpBarFill.className = 'hp-bar-fill';
+      hpBar.appendChild(hpBarFill);
+      object.appendChild(hpBar);
+
+      document.getElementById('game-container').appendChild(object);
+
+      const maxHp = Math.floor(size * 2);
+      celestialObjects.push({
+        element: object,
+        hp: maxHp,
+        maxHp: maxHp,
+        hpBarFill: hpBarFill
+      });
+    }
+
+    function createEnemyShip() {
+      const enemy = document.createElement('div');
+      enemy.className = 'enemy-ship';
+      enemy.style.left = `${Math.random() * window.innerWidth}px`;
+      enemy.style.top = `-30px`;
+      document.getElementById('game-container').appendChild(enemy);
+      enemyShips.push({ element: enemy, slow: false });
+    }
+
+    function updateCelestialObjects() {
+      celestialObjects.forEach((object, index) => {
+        const top = parseFloat(object.element.style.top);
+        if (top > window.innerHeight) {
+          document.getElementById('game-container').removeChild(object.element);
+          celestialObjects.splice(index, 1);
+        } else {
+          const speed = object.slow ? 0.5 : 1; // Slow down if affected by Temporal Rift
+          object.element.style.top = `${top + speed}px`;
+        }
+      });
+    }
+
+    function updateEnemyShips() {
+      enemyShips.forEach((enemy, index) => {
+        const top = parseFloat(enemy.element.style.top);
+        if (top > window.innerHeight) {
+          document.getElementById('game-container').removeChild(enemy.element);
+          enemyShips.splice(index, 1);
+        } else {
+          const speed = enemy.slow ? 0.5 : 2; // Slow down more significantly if affected by Temporal Rift
+          enemy.element.style.top = `${top + speed}px`;
+        }
+      });
+    }
+
+    function updateShipPosition() {
+      const ship = document.getElementById('ship');
+      ship.style.left = `${shipX}px`;
+      ship.style.top = `${shipY}px`;
+    }
+
+    function updatePlayerHealthBar() {
+      const healthPercentage = (playerHealth / playerMaxHealth) * 100;
+      document.getElementById('player-health-fill').style.width = `${healthPercentage}%`;
+    }
+
+    function damagePlayer(amount) {
+      const shieldFill = document.getElementById('player-shield-fill');
+      const currentShield = parseFloat(shieldFill.style.width) || 0;
+
+      if (currentShield > 0) {
+        if (currentShield >= amount) {
+          shieldFill.style.width = `${currentShield - amount}%`;
+          return;
+        } else {
+          amount -= currentShield;
+          shieldFill.style.width = '0%';
+        }
+      }
+
+      playerHealth -= amount;
+      updatePlayerHealthBar();
+
+      if (playerHealth <= 0) {
+        gameOver();
+      }
+    }
+
+    function checkCollisions() {
+      const shipRect = document.getElementById('ship').getBoundingClientRect();
+
+      celestialObjects.forEach(object => {
+        const objectRect = object.element.getBoundingClientRect();
+        if (isColliding(shipRect, objectRect)) {
+          damagePlayer(10);
+        }
+      });
+
+      enemyShips.forEach(enemy => {
+        const enemyRect = enemy.element.getBoundingClientRect();
+        if (isColliding(shipRect, enemyRect)) {
+          damagePlayer(20);
+        }
+      });
+    }
+
+    function isColliding(rect1, rect2) {
+      return !(rect1.right < rect2.left ||
+        rect1.left > rect2.right ||
+        rect1.bottom < rect2.top ||
+        rect1.top > rect2.bottom);
+    }
+
+    function gameOver() {
+      gameActive = false;
+      document.getElementById('game-over').style.display = 'block';
+    }
+
+    function restartGame() {
+      gameActive = true;
+      playerHealth = playerMaxHealth;
+      totalDamage = 0;
+      damageLog = [];
+      shipX = window.innerWidth / 2;
+      shipY = window.innerHeight / 2;
+
+      celestialObjects.forEach(obj => obj.element.remove());
+      enemyShips.forEach(ship => ship.element.remove());
+      abilityEffects.forEach(effect => effect.element.remove());
+
+      celestialObjects.length = 0;
+      enemyShips.length = 0;
+      abilityEffects.length = 0;
+
+      updateDamageOutput();
+      updateDPS();
+      updatePlayerHealthBar();
+
+      document.getElementById('game-over').style.display = 'none';
+      document.getElementById('ship').style.left = `${shipX}px`;
+      document.getElementById('ship').style.top = `${shipY}px`;
+      document.getElementById('player-shield-fill').style.width = '0%';
+    }
+
+    function gameLoop() {
+      if (gameActive) {
+        if (keys.a) shipX -= shipSpeed;
+        if (keys.d) shipX += shipSpeed;
+        if (keys.w) shipY -= shipSpeed;
+        if (keys.s) shipY += shipSpeed;
+
+        shipX = Math.max(0, Math.min(window.innerWidth - 40, shipX));
+        shipY = Math.max(0, Math.min(window.innerHeight - 40, shipY));
+
+        updateShipPosition();
+        updateCelestialObjects();
+        updateEnemyShips();
+        checkCollisions();
+      }
+      requestAnimationFrame(gameLoop);
+    }
+
+    // Initialize the game
+    createAbilityButtons();
+    document.addEventListener('keydown', handleKeyDown);
+    document.addEventListener('keyup', handleKeyUp);
+    updatePlayerHealthBar();
+    gameLoop();
+
+    setInterval(updateDPS, 1000);
+    setInterval(createCelestialObject, 2000);
+    setInterval(createEnemyShip, 5000);
+  </script>
+</body>
+
+</html>
