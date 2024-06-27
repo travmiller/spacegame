@@ -889,10 +889,10 @@
 
     function gameLoop() {
       if (gameActive) {
-        if (keys.a) shipX -= shipSpeed;
-        if (keys.d) shipX += shipSpeed;
-        if (keys.w) shipY -= shipSpeed;
-        if (keys.s) shipY += shipSpeed;
+        if (keys.ArrowLeft) shipX -= shipSpeed;
+        if (keys.ArrowRight) shipX += shipSpeed;
+        if (keys.ArrowUp) shipY -= shipSpeed;
+        if (keys.ArrowDown) shipY += shipSpeed;
 
         shipX = Math.max(0, Math.min(window.innerWidth - 40, shipX));
         shipY = Math.max(0, Math.min(window.innerHeight - 40, shipY));
