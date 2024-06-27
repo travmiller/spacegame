@@ -238,7 +238,7 @@
     let shipX = window.innerWidth / 2;
     let shipY = window.innerHeight / 2;
     let shipSpeed = 5;
-    const keys = { w: false, a: false, s: false, d: false };
+    const keys = { ArrowUp: false, ArrowLeft: false, ArrowDown: false, ArrowRight: false };
     const celestialObjects = [];
     const enemyShips = [];
     const abilityEffects = [];
@@ -719,7 +719,7 @@
     }
 
     function handleKeyDown(event) {
-      if (['w', 'a', 's', 'd'].includes(event.key)) {
+      if (['ArrowUp', 'ArrowLeft', 'ArrowDown', 'ArrowRight'].includes(event.key)) {
         keys[event.key] = true;
       } else {
         const ability = abilities.find(a => a.key === event.key);
@@ -730,7 +730,7 @@
     }
 
     function handleKeyUp(event) {
-      if (['w', 'a', 's', 'd'].includes(event.key)) {
+      if (['ArrowUp', 'ArrowLeft', 'ArrowDown', 'ArrowRight'].includes(event.key)) {
         keys[event.key] = false;
       }
     }
